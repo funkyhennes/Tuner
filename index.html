@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stimmgerät">
+<meta name="theme-color" content="#0b0c0f">
+<title>Stimmgerät</title>
+<style>
+  :root{
+    --bg:#0b0c0f;
+    --panel:#15171c;
+    --panel2:#1c1f26;
+    --line:#2a2e37;
+    --amber:#ffb03a;
+    --amber-dim:#8a5c1a;
+    --green:#3ddc84;
+    --red:#ff5252;
+    --text:#cfc9bc;
+    --muted:#7c7f88;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    min-height:100vh;min-height:100dvh;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    user-select:none;-webkit-user-select:none;
+    overscroll-behavior:none;
+  }
+  .app{width:100%;max-width:440px;padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px;flex:1}
+
+  header{display:flex;align-items:baseline;justify-content:space-between}
+  header h1{font-size:15px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;color:var(--text)}
+  header .a4{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  header .a4 button{background:none;border:none;color:var(--amber);font-family:var(--mono);font-size:12px;cursor:pointer;padding:2px 4px}
+
+  /* Modus-Tabs */
+  .tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+  .tabs button{
+    background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:10px 0;border-radius:10px;font-size:11.5px;font-weight:600;letter-spacing:.02em;cursor:pointer;
+  }
+  .tabs button.active{background:var(--panel2);border-color:var(--amber-dim);color:var(--amber)}
+
+  /* Stimmungs-Auswahl */
+  .tuningRow{display:none}
+  .tuningRow.show{display:block}
+  .tuningRow select{
+    width:100%;background:var(--panel);color:var(--text);border:1px solid var(--line);
+    border-radius:10px;padding:11px 12px;font-size:14px;font-family:inherit;
+    -webkit-appearance:none;appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffb03a' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 14px center;
+  }
+
+  /* Anzeige */
+  .display{
+    background:linear-gradient(180deg,#14161b 0%,#101217 100%);
+    border:1px solid var(--line);border-radius:18px;
+    padding:16px 14px 8px;position:relative;overflow:hidden;
+  }
+  .note-row{display:flex;align-items:baseline;justify-content:center;gap:10px;min-height:80px}
+  .note{
+    font-family:var(--mono);font-size:68px;font-weight:700;line-height:1;
+    color:var(--amber);text-shadow:0 0 22px rgba(255,176,58,.35);
+    transition:color .15s,text-shadow .15s;
+  }
+  .note.intune{color:var(--green);text-shadow:0 0 26px rgba(61,220,132,.45)}
+  .note .oct{font-size:25px;color:var(--muted);text-shadow:none;font-weight:500}
+  .freq{font-family:var(--mono);font-size:13.5px;color:var(--muted);text-align:center;min-height:18px}
+  .cents-label{font-family:var(--mono);font-size:13px;text-align:center;min-height:18px;margin-top:2px}
+  .cents-label.sharp{color:var(--red)}
+  .cents-label.flat{color:var(--red)}
+  .cents-label.ok{color:var(--green)}
+
+  .gauge{width:100%;display:block;margin-top:4px}
+
+  .lamps{display:flex;justify-content:center;gap:26px;padding:7px 0 3px}
+  .lamp{width:12px;height:12px;border-radius:50%;background:#23262d;border:1px solid var(--line);transition:all .12s}
+  .lamp.flat.on{background:var(--red);box-shadow:0 0 12px rgba(255,82,82,.7)}
+  .lamp.ok.on{background:var(--green);box-shadow:0 0 14px rgba(61,220,132,.8)}
+  .lamp.sharp.on{background:var(--red);box-shadow:0 0 12px rgba(255,82,82,.7)}
+
+  /* Saiten / Trommeln */
+  .targets{display:grid;gap:6px}
+  .targets.g4{grid-template-columns:repeat(4,1fr)}
+  .targets.g5{grid-template-columns:repeat(5,1fr)}
+  .targets.g6{grid-template-columns:repeat(6,1fr)}
+  .targets button{
+    background:var(--panel);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:9px 2px;cursor:pointer;font-family:var(--mono);
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+  }
+  .targets button .n{font-size:15px;font-weight:700}
+  .targets button .hz{font-size:9.5px;color:var(--muted)}
+  .targets button.near{border-color:var(--amber);color:var(--amber)}
+  .targets button.hit{border-color:var(--green);color:var(--green)}
+  .rowlabel{grid-column:1/-1;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:2px 2px 0}
+  .hint{font-size:12px;color:var(--muted);text-align:center;line-height:1.5}
+
+  .start{
+    background:var(--amber);color:#1a1408;border:none;border-radius:14px;
+    font-size:16px;font-weight:700;padding:16px;cursor:pointer;letter-spacing:.02em;
+    box-shadow:0 4px 24px rgba(255,176,58,.25);
+  }
+  .start.listening{background:var(--panel2);color:var(--muted);border:1px solid var(--line);box-shadow:none;font-weight:500}
+  .err{color:var(--red);font-size:13px;text-align:center;line-height:1.5;display:none}
+
+  footer{margin-top:auto;text-align:center;font-size:11px;color:#4c4f57;line-height:1.6;padding-top:6px}
+  @media (prefers-reduced-motion:reduce){.note,.lamp{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Stimmgerät</h1>
+    <div class="a4">A4 = <button id="a4down">−</button><span id="a4val">440</span> Hz <button id="a4up">+</button></div>
+  </header>
+
+  <div class="tabs" id="tabs">
+    <button data-mode="guitar" class="active">Gitarre</button>
+    <button data-mode="bass">Bass</button>
+    <button data-mode="mando">Mando</button>
+    <button data-mode="drums">Drums</button>
+    <button data-mode="chrom">Chrom.</button>
+  </div>
+
+  <div class="tuningRow" id="tuningRow">
+    <select id="tuningSelect" aria-label="Stimmung wählen"></select>
+  </div>
+
+  <div class="display">
+    <div class="note-row"><div class="note" id="note">–</div></div>
+    <div class="freq" id="freq">&nbsp;</div>
+    <div class="cents-label" id="centsLabel">&nbsp;</div>
+    <svg class="gauge" id="gauge" viewBox="0 0 300 120" aria-hidden="true"></svg>
+    <div class="lamps">
+      <div class="lamp flat" id="lampFlat"></div>
+      <div class="lamp ok" id="lampOk"></div>
+      <div class="lamp sharp" id="lampSharp"></div>
+    </div>
+  </div>
+
+  <div class="targets" id="targets"></div>
+  <div class="hint" id="hint"></div>
+
+  <button class="start" id="startBtn">Mikrofon starten</button>
+  <div class="err" id="err"></div>
+
+  <footer>Tipp: In Safari über „Teilen → Zum Home-Bildschirm" als App speichern.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var NOTE_NAMES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","H"];
+  var a4=440;
+  var mode="guitar";
+  var tuningIdx={guitar:0,bass:0,mando:0};
+  var selectedTarget=null; // Index in aktueller Zielliste, null = automatisch
+
+  // Hilfsfunktion: Saitenliste aus Namen+MIDI-Paaren
+  function s(){var out=[];for(var i=0;i<arguments.length;i+=2)out.push({n:arguments[i],midi:arguments[i+1]});return out;}
+
+  var GUITAR_TUNINGS=[
+    {name:"Standard (E A D G H E)",items:s("E2",40,"A2",45,"D3",50,"G3",55,"H3",59,"E4",64)},
+    {name:"Drop D (D A D G H E)",items:s("D2",38,"A2",45,"D3",50,"G3",55,"H3",59,"E4",64)},
+    {name:"Halbton tiefer (Eb-Tuning)",items:s("D#2",39,"G#2",44,"C#3",49,"F#3",54,"A#3",58,"D#4",63)},
+    {name:"Ganzton tiefer (D-Standard)",items:s("D2",38,"G2",43,"C3",48,"F3",53,"A3",57,"D4",62)},
+    {name:"DADGAD",items:s("D2",38,"A2",45,"D3",50,"G3",55,"A3",57,"D4",62)},
+    {name:"Open G (D G D G H D)",items:s("D2",38,"G2",43,"D3",50,"G3",55,"H3",59,"D4",62)},
+    {name:"Open D (D A D F# A D)",items:s("D2",38,"A2",45,"D3",50,"F#3",54,"A3",57,"D4",62)},
+    {name:"Open E (E H E G# H E)",items:s("E2",40,"H2",47,"E3",52,"G#3",56,"H3",59,"E4",64)},
+    {name:"Open A (E A E A C# E)",items:s("E2",40,"A2",45,"E3",52,"A3",57,"C#4",61,"E4",64)},
+    {name:"Open C (C G C G C E)",items:s("C2",36,"G2",43,"C3",48,"G3",55,"C4",60,"E4",64)},
+    {name:"Drop C (C G C F A D)",items:s("C2",36,"G2",43,"C3",48,"F3",53,"A3",57,"D4",62)},
+    {name:"12-Saiter Standard",twelve:true,
+      low:s("E2",40,"A2",45,"D3",50,"G3",55,"H3",59,"E4",64),
+      oct:s("E3",52,"A3",57,"D4",62,"G4",67,"H3",59,"E4",64)}
+  ];
+  var BASS_TUNINGS=[
+    {name:"Standard 4-Saiter (E A D G)",items:s("E1",28,"A1",33,"D2",38,"G2",43)},
+    {name:"5-Saiter (H E A D G)",items:s("H0",23,"E1",28,"A1",33,"D2",38,"G2",43)},
+    {name:"Drop D (D A D G)",items:s("D1",26,"A1",33,"D2",38,"G2",43)},
+    {name:"Halbton tiefer (Eb)",items:s("D#1",27,"G#1",32,"C#2",37,"F#2",42)},
+    {name:"6-Saiter (H E A D G C)",items:s("H0",23,"E1",28,"A1",33,"D2",38,"G2",43,"C3",48)}
+  ];
+  var MANDO_TUNINGS=[
+    {name:"Mandoline Standard (G D A E)",items:s("G3",55,"D4",62,"A4",69,"E5",76)},
+    {name:"Mandola (C G D A)",items:s("C3",48,"G3",55,"D4",62,"A4",69)},
+    {name:"Ukulele (G C E A)",items:s("G4",67,"C4",60,"E4",64,"A4",69)}
+  ];
+
+  var HINTS={
+    guitar:"Saite anschlagen – die passende Saite wird automatisch erkannt. Zum Fixieren antippen.",
+    guitar12:"12-Saiter: jede Saite einzeln anschlagen. Obere Reihe = Oktav-/Doppelsaiten, untere Reihe = Hauptsaiten. Bei H und E sind beide Saiten unisono.",
+    bass:"Saite anschlagen – Erkennung läuft automatisch. Zum Fixieren antippen.",
+    mando:"Beide Saiten eines Chors sind unisono gestimmt – einzeln anschlagen und angleichen.",
+    drums:"Fell in der Mitte leicht anschlagen und Grundton ablesen. Preset antippen für Ziel-Frequenz (Richtwerte – nach Geschmack anpassen). Für gleichmäßige Spannung nahe jeder Stimmschraube einzeln anschlagen und auf gleiche Tonhöhe bringen.",
+    chrom:"Chromatischer Modus: erkennt jeden Ton automatisch – für alle Instrumente und Spezial-Tunings."
+  };
+  var DRUM_ITEMS=[{n:"Kick",hz:60},{n:"Floor",hz:110},{n:"Tom 12\"",hz:150},{n:"Tom 10\"",hz:200},{n:"Snare",hz:230}];
+
+  function midiToFreq(m){return a4*Math.pow(2,(m-69)/12);}
+  function freqToMidi(f){return 69+12*Math.log2(f/a4);}
+
+  // Aktuelle Zielliste (flach) für Erkennung + Anzeige
+  function currentTargets(){
+    if(mode==="drums")return DRUM_ITEMS.map(function(it){return {n:it.n,hz:it.hz};});
+    if(mode==="chrom")return [];
+    var t;
+    if(mode==="guitar")t=GUITAR_TUNINGS[tuningIdx.guitar];
+    else if(mode==="bass")t=BASS_TUNINGS[tuningIdx.bass];
+    else t=MANDO_TUNINGS[tuningIdx.mando];
+    if(t.twelve)return t.oct.concat(t.low).map(function(it){return {n:it.n,hz:midiToFreq(it.midi)};});
+    return t.items.map(function(it){return {n:it.n,hz:midiToFreq(it.midi)};});
+  }
+  function currentTuning(){
+    if(mode==="guitar")return GUITAR_TUNINGS[tuningIdx.guitar];
+    if(mode==="bass")return BASS_TUNINGS[tuningIdx.bass];
+    if(mode==="mando")return MANDO_TUNINGS[tuningIdx.mando];
+    return null;
+  }
+
+  // ---------- UI ----------
+  var $=function(id){return document.getElementById(id);};
+  var noteEl=$("note"),freqEl=$("freq"),centsLabel=$("centsLabel");
+  var lampFlat=$("lampFlat"),lampOk=$("lampOk"),lampSharp=$("lampSharp");
+  var targetsEl=$("targets"),hintEl=$("hint"),errEl=$("err"),startBtn=$("startBtn");
+  var tuningRow=$("tuningRow"),tuningSelect=$("tuningSelect");
+
+  // Nadel-Skala (SVG)
+  var gauge=$("gauge");
+  (function buildGauge(){
+    var out='';
+    for(var c=-50;c<=50;c+=5){
+      var a=(c/50)*60*Math.PI/180;
+      var x1=150+Math.sin(a)*100,y1=115-Math.cos(a)*100;
+      var len=(c%25===0)?14:(c%10===0?10:6);
+      var x2=150+Math.sin(a)*(100-len),y2=115-Math.cos(a)*(100-len);
+      var col=(c===0)?"#3ddc84":"#3a3e48";
+      out+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+col+'" stroke-width="'+(c===0?2.5:1.5)+'"/>';
+    }
+    out+='<text x="52" y="60" fill="#7c7f88" font-size="11" font-family="monospace">−50</text>';
+    out+='<text x="228" y="60" fill="#7c7f88" font-size="11" font-family="monospace">+50</text>';
+    out+='<line id="needle" x1="150" y1="115" x2="150" y2="22" stroke="#ffb03a" stroke-width="3" stroke-linecap="round"/>';
+    out+='<circle cx="150" cy="115" r="6" fill="#2a2e37"/>';
+    gauge.innerHTML=out;
+  })();
+  var needle=$("needle");
+  var needleAngle=0;
+  function setNeedle(cents,inTune){
+    var target=Math.max(-50,Math.min(50,cents))/50*60;
+    needleAngle+=(target-needleAngle)*0.35;
+    var a=needleAngle*Math.PI/180;
+    needle.setAttribute("x2",150+Math.sin(a)*93);
+    needle.setAttribute("y2",115-Math.cos(a)*93);
+    needle.setAttribute("stroke",inTune?"#3ddc84":"#ffb03a");
+  }
+
+  function renderTuningSelect(){
+    var list=null,key=null;
+    if(mode==="guitar"){list=GUITAR_TUNINGS;key="guitar";}
+    else if(mode==="bass"){list=BASS_TUNINGS;key="bass";}
+    else if(mode==="mando"){list=MANDO_TUNINGS;key="mando";}
+    if(!list){tuningRow.classList.remove("show");return;}
+    tuningRow.classList.add("show");
+    var html="";
+    list.forEach(function(t,i){html+='<option value="'+i+'"'+(i===tuningIdx[key]?" selected":"")+'>'+t.name+'</option>';});
+    tuningSelect.innerHTML=html;
+  }
+  tuningSelect.addEventListener("change",function(){
+    tuningIdx[mode]=+this.value;selectedTarget=null;
+    renderTargets();resetDisplay();
+  });
+
+  function renderTargets(){
+    var t=currentTuning();
+    var items=currentTargets();
+    var hint;
+    if(mode==="drums")hint=HINTS.drums;
+    else if(mode==="chrom")hint=HINTS.chrom;
+    else if(t&&t.twelve)hint=HINTS.guitar12;
+    else hint=HINTS[mode];
+    hintEl.textContent=hint;
+
+    targetsEl.style.display=items.length?"grid":"none";
+    var cols=items.length<=4?"g4":(items.length===5?"g5":"g6");
+    targetsEl.className="targets "+cols;
+
+    var html="";
+    if(t&&t.twelve){
+      html+='<div class="rowlabel">Oktavsaiten</div>';
+      t.oct.forEach(function(it,i){html+=btn(i,it.n,midiToFreq(it.midi));});
+      html+='<div class="rowlabel">Hauptsaiten</div>';
+      t.low.forEach(function(it,i){html+=btn(i+6,it.n,midiToFreq(it.midi));});
+    }else{
+      items.forEach(function(it,i){html+=btn(i,it.n,it.hz);});
+    }
+    targetsEl.innerHTML=html;
+    function btn(i,n,hz){return '<button data-i="'+i+'"><span class="n">'+n+'</span><span class="hz">'+hz.toFixed(1)+' Hz</span></button>';}
+  }
+  targetsEl.addEventListener("click",function(e){
+    var b=e.target.closest("button");if(!b)return;
+    var i=+b.dataset.i;
+    selectedTarget=(selectedTarget===i)?null:i;
+    updateTargetButtons(-1,false);
+  });
+  function updateTargetButtons(nearIdx,hit){
+    var btns=targetsEl.querySelectorAll("button");
+    btns.forEach(function(b){
+      var i=+b.dataset.i;
+      b.classList.remove("near","hit");
+      var active=(selectedTarget!==null)?(i===selectedTarget):(i===nearIdx);
+      if(active)b.classList.add(hit?"hit":"near");
+    });
+  }
+
+  document.getElementById("tabs").addEventListener("click",function(e){
+    var b=e.target.closest("button");if(!b)return;
+    mode=b.dataset.mode;selectedTarget=null;
+    this.querySelectorAll("button").forEach(function(x){x.classList.toggle("active",x===b);});
+    renderTuningSelect();renderTargets();resetDisplay();
+  });
+
+  $("a4up").onclick=function(){if(a4<446){a4++;$("a4val").textContent=a4;renderTargets();}};
+  $("a4down").onclick=function(){if(a4>434){a4--;$("a4val").textContent=a4;renderTargets();}};
+
+  function resetDisplay(){
+    noteEl.innerHTML="–";noteEl.classList.remove("intune");
+    freqEl.innerHTML="&nbsp;";centsLabel.innerHTML="&nbsp;";centsLabel.className="cents-label";
+    lampFlat.classList.remove("on");lampOk.classList.remove("on");lampSharp.classList.remove("on");
+    setNeedle(0,false);
+  }
+
+  // ---------- Audio ----------
+  var audioCtx=null,analyser=null,buf=null,running=false,rafId=null,micStream=null;
+
+  startBtn.addEventListener("click",function(){
+    if(running){stop();return;}
+    start();
+  });
+
+  function start(){
+    errEl.style.display="none";
+    var AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+      showErr("Dein Browser unterstützt keinen Mikrofon-Zugriff. Bitte Safari oder Chrome verwenden.");return;
+    }
+    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+    .then(function(stream){
+      micStream=stream;
+      audioCtx=new AC();
+      if(audioCtx.state==="suspended")audioCtx.resume();
+      var src=audioCtx.createMediaStreamSource(stream);
+      analyser=audioCtx.createAnalyser();
+      analyser.fftSize=8192;
+      src.connect(analyser);
+      buf=new Float32Array(analyser.fftSize);
+      running=true;
+      startBtn.textContent="Höre zu … (tippen zum Stoppen)";
+      startBtn.classList.add("listening");
+      loop();
+    })
+    .catch(function(){
+      showErr("Mikrofon-Zugriff verweigert. Bitte in den Einstellungen erlauben (iPhone: Einstellungen → Safari → Mikrofon).");
+    });
+  }
+  function stop(){
+    running=false;
+    if(rafId)cancelAnimationFrame(rafId);
+    if(micStream){micStream.getTracks().forEach(function(t){t.stop();});micStream=null;}
+    if(audioCtx){audioCtx.close();audioCtx=null;}
+    startBtn.textContent="Mikrofon starten";
+    startBtn.classList.remove("listening");
+    resetDisplay();
+  }
+  function showErr(t){errEl.textContent=t;errEl.style.display="block";}
+
+  // Autokorrelation (ACF2+) – robust für tiefe Saiten und Toms
+  function detectPitch(buffer,sampleRate){
+    var SIZE=buffer.length,rms=0,i;
+    for(i=0;i<SIZE;i++)rms+=buffer[i]*buffer[i];
+    rms=Math.sqrt(rms/SIZE);
+    if(rms<0.008)return -1;
+
+    var r1=0,r2=SIZE-1,thres=0.2;
+    for(i=0;i<SIZE/2;i++)if(Math.abs(buffer[i])<thres){r1=i;break;}
+    for(i=1;i<SIZE/2;i++)if(Math.abs(buffer[SIZE-i])<thres){r2=SIZE-i;break;}
+    var b=buffer.slice(r1,r2),N=b.length;
+    if(N<64)return -1;
+
+    var c=new Float32Array(N);
+    for(i=0;i<N;i++)for(var j=0;j<N-i;j++)c[i]+=b[j]*b[j+i];
+
+    var d=0;while(d+1<N&&c[d]>c[d+1])d++;
+    var maxval=-1,maxpos=-1;
+    for(i=d;i<N;i++){if(c[i]>maxval){maxval=c[i];maxpos=i;}}
+    if(maxpos<=0)return -1;
+    var T0=maxpos;
+    var x1=c[T0-1],x2=c[T0],x3=c[T0+1]||x2;
+    var a=(x1+x3-2*x2)/2,bb=(x3-x1)/2;
+    if(a)T0=T0-bb/(2*a);
+    var f=sampleRate/T0;
+    if(f<25||f>2000)return -1;
+    return f;
+  }
+
+  var stableCount=0,lastFreq=0;
+  function loop(){
+    if(!running)return;
+    analyser.getFloatTimeDomainData(buf);
+    var f=detectPitch(buf,audioCtx.sampleRate);
+    if(f>0){
+      if(lastFreq>0&&Math.abs(f-lastFreq)/lastFreq<0.05)f=lastFreq*0.6+f*0.4;
+      lastFreq=f;
+      render(f);
+    }else{
+      lastFreq=0;stableCount=0;
+    }
+    rafId=requestAnimationFrame(loop);
+  }
+
+  function render(f){
+    var items=currentTargets();
+    var cents,nearIdx=-1;
+
+    if(mode==="drums"){
+      var best=0,bestD=1e9;
+      items.forEach(function(it,i){var d=Math.abs(Math.log2(f/it.hz));if(d<bestD){bestD=d;best=i;}});
+      var idx=(selectedTarget!==null&&selectedTarget<items.length)?selectedTarget:best;
+      nearIdx=idx;
+      var tHz=items[idx].hz;
+      cents=1200*Math.log2(f/tHz);
+      noteEl.innerHTML=Math.round(f)+'<span class="oct">Hz</span>';
+      freqEl.textContent="Ziel "+items[idx].n+": "+tHz.toFixed(0)+" Hz";
+    }else if(items.length){
+      var best2=0,bestD2=1e9;
+      items.forEach(function(it,i){var d=Math.abs(Math.log2(f/it.hz));if(d<bestD2){bestD2=d;best2=i;}});
+      var idx2=(selectedTarget!==null&&selectedTarget<items.length)?selectedTarget:best2;
+      nearIdx=idx2;
+      var tF=items[idx2].hz;
+      cents=1200*Math.log2(f/tF);
+      if(Math.abs(cents)>120&&selectedTarget===null){renderChrom(f);return;}
+      noteEl.innerHTML=items[idx2].n.replace(/(\d)/,'<span class="oct">$1</span>');
+      freqEl.textContent=f.toFixed(1)+" Hz";
+    }else{
+      renderChrom(f);return;
+    }
+    finishRender(cents,nearIdx);
+  }
+
+  function renderChrom(f){
+    var m=freqToMidi(f),mr=Math.round(m);
+    var cents=(m-mr)*100;
+    var name=NOTE_NAMES[((mr%12)+12)%12],oct=Math.floor(mr/12)-1;
+    noteEl.innerHTML=name+'<span class="oct">'+oct+'</span>';
+    freqEl.textContent=f.toFixed(1)+" Hz";
+    finishRender(cents,-1);
+  }
+
+  function finishRender(cents,nearIdx){
+    var TOL=(mode==="drums")?8:4;
+    var inTune=Math.abs(cents)<=TOL;
+    if(inTune)stableCount++;else stableCount=0;
+    var lock=stableCount>=3;
+
+    setNeedle(cents,lock);
+    noteEl.classList.toggle("intune",lock);
+    lampOk.classList.toggle("on",lock);
+    lampFlat.classList.toggle("on",!inTune&&cents<0);
+    lampSharp.classList.toggle("on",!inTune&&cents>0);
+
+    if(lock){centsLabel.textContent="✓ gestimmt";centsLabel.className="cents-label ok";}
+    else if(cents<0){centsLabel.textContent=Math.abs(cents).toFixed(0)+" Cent zu tief ▲ höher drehen";centsLabel.className="cents-label flat";}
+    else{centsLabel.textContent=cents.toFixed(0)+" Cent zu hoch ▼ tiefer drehen";centsLabel.className="cents-label sharp";}
+
+    updateTargetButtons(nearIdx,lock);
+  }
+
+  renderTuningSelect();
+  renderTargets();
+  resetDisplay();
+})();
+</script>
+</body>
+</html>

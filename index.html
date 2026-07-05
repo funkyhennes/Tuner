@@ -199,11 +199,11 @@
   ];
 
   var HINTS={
-    guitar:"Saite anschlagen – die passende Saite wird automatisch erkannt. Zum Fixieren antippen.",
-    guitar12:"12-Saiter: jede Saite einzeln anschlagen. Obere Reihe = Oktav-/Doppelsaiten, untere Reihe = Hauptsaiten. Bei H und E sind beide Saiten unisono.",
-    bass:"Saite anschlagen – Erkennung läuft automatisch. Zum Fixieren antippen.",
-    mando:"Beide Saiten eines Chors sind unisono gestimmt – einzeln anschlagen und angleichen.",
-    drums:"Fell in der Mitte leicht anschlagen und Grundton ablesen. Preset antippen für Ziel-Frequenz (Richtwerte – nach Geschmack anpassen). Für gleichmäßige Spannung nahe jeder Stimmschraube einzeln anschlagen und auf gleiche Tonhöhe bringen.",
+    guitar:"Saite anschlagen – die passende Saite wird automatisch erkannt. Antippen fixiert die Saite und spielt den Ziel-Ton. ♪",
+    guitar12:"12-Saiter: jede Saite einzeln anschlagen. Obere Reihe = Oktav-/Doppelsaiten, untere Reihe = Hauptsaiten. Antippen spielt den Ziel-Ton. ♪",
+    bass:"Saite anschlagen – Erkennung läuft automatisch. Antippen fixiert die Saite und spielt den Ziel-Ton. ♪",
+    mando:"Beide Saiten eines Chors sind unisono gestimmt – einzeln anschlagen und angleichen. Antippen spielt den Ziel-Ton. ♪",
+    drums:"Fell in der Mitte leicht anschlagen und Grundton ablesen. Preset antippen: fixiert das Ziel und spielt den Referenzton (Richtwerte – nach Geschmack anpassen). Für gleichmäßige Spannung nahe jeder Stimmschraube einzeln anschlagen und auf gleiche Tonhöhe bringen.",
     chrom:"Chromatischer Modus: erkennt jeden Ton automatisch – für alle Instrumente und Spezial-Tunings."
   };
   var DRUM_ITEMS=[{n:"Kick",hz:60},{n:"Floor",hz:110},{n:"Tom 12\"",hz:150},{n:"Tom 10\"",hz:200},{n:"Snare",hz:230}];
@@ -312,7 +312,40 @@
     var i=+b.dataset.i;
     selectedTarget=(selectedTarget===i)?null:i;
     updateTargetButtons(-1,false);
+    var items=currentTargets();
+    if(items[i])playTone(items[i].hz);
   });
+
+  // ---------- Ziel-Ton abspielen ----------
+  var toneCtx=null,toneNodes=[];
+  function playTone(hz){
+    var AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    if(!toneCtx)toneCtx=new AC();
+    if(toneCtx.state==="suspended")toneCtx.resume();
+    // laufenden Ton stoppen
+    toneNodes.forEach(function(n){try{n.stop();}catch(err){}});
+    toneNodes=[];
+    var now=toneCtx.currentTime;
+    var dur=(mode==="drums")?1.2:2.2;
+    var master=toneCtx.createGain();
+    master.gain.setValueAtTime(0.0001,now);
+    master.gain.exponentialRampToValueAtTime(0.5,now+0.015); // kurzer Attack
+    master.gain.exponentialRampToValueAtTime(0.0001,now+dur); // Ausklingen wie Saite
+    master.connect(toneCtx.destination);
+    // Grundton + leiser Oberton für natürlicheren Klang
+    var partials=(mode==="drums")?[[1,1]]:[[1,1],[2,0.35],[3,0.12]];
+    partials.forEach(function(p){
+      var o=toneCtx.createOscillator();
+      o.type=(mode==="drums")?"sine":"triangle";
+      o.frequency.value=hz*p[0];
+      var g=toneCtx.createGain();
+      g.gain.value=p[1];
+      o.connect(g);g.connect(master);
+      o.start(now);o.stop(now+dur+0.1);
+      toneNodes.push(o);
+    });
+  }
   function updateTargetButtons(nearIdx,hit){
     var btns=targetsEl.querySelectorAll("button");
     btns.forEach(function(b){

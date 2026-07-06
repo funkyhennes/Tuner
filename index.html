@@ -451,6 +451,7 @@
     if(!running)return;
     analyser.getFloatTimeDomainData(buf);
     var f=detectPitch(buf,audioCtx.sampleRate);
+    if(f>0&&mode==="drums"&&(f<30||f>500))f=-1; // Obertöne/Stick-Attack ausblenden
     if(f>0){
       if(lastFreq>0&&Math.abs(f-lastFreq)/lastFreq<0.05)f=lastFreq*0.6+f*0.4;
       lastFreq=f;
@@ -474,6 +475,8 @@
       cents=1200*Math.log2(f/tHz);
       noteEl.innerHTML=Math.round(f)+'<span class="oct">Hz</span>';
       freqEl.textContent="Ziel "+items[idx].n+": "+tHz.toFixed(0)+" Hz";
+      finishRender(cents,nearIdx,{f:f,tHz:tHz});
+      return;
     }else if(items.length){
       var best2=0,bestD2=1e9;
       items.forEach(function(it,i){var d=Math.abs(Math.log2(f/it.hz));if(d<bestD2){bestD2=d;best2=i;}});
@@ -499,7 +502,7 @@
     finishRender(cents,-1);
   }
 
-  function finishRender(cents,nearIdx){
+  function finishRender(cents,nearIdx,drum){
     var TOL=(mode==="drums")?8:4;
     var inTune=Math.abs(cents)<=TOL;
     if(inTune)stableCount++;else stableCount=0;
@@ -511,9 +514,26 @@
     lampFlat.classList.toggle("on",!inTune&&cents<0);
     lampSharp.classList.toggle("on",!inTune&&cents>0);
 
-    if(lock){centsLabel.textContent="✓ gestimmt";centsLabel.className="cents-label ok";}
-    else if(cents<0){centsLabel.textContent=Math.abs(cents).toFixed(0)+" Cent zu tief ▲ höher drehen";centsLabel.className="cents-label flat";}
-    else{centsLabel.textContent=cents.toFixed(0)+" Cent zu hoch ▼ tiefer drehen";centsLabel.className="cents-label sharp";}
+    var txt,cls;
+    if(lock){txt="✓ gestimmt";cls="ok";}
+    else if(drum){
+      // Drums: Abweichung in Hz angeben
+      var diff=drum.f-drum.tHz;
+      if(diff<0)txt=Math.abs(diff).toFixed(0)+" Hz zu tief ▲ höher stimmen";
+      else txt=diff.toFixed(0)+" Hz zu hoch ▼ tiefer stimmen";
+      cls=diff<0?"flat":"sharp";
+    }
+    else if(Math.abs(cents)>100){
+      // Weit daneben: in Halbtönen statt Cent
+      var ht=Math.abs(cents)/100;
+      var htTxt=ht>=1.5?("≈ "+Math.round(ht)+" Halbtöne"):"gut 1 Halbton";
+      txt=htTxt+(cents<0?" zu tief ▲":" zu hoch ▼");
+      cls=cents<0?"flat":"sharp";
+    }
+    else if(cents<0){txt=Math.abs(cents).toFixed(0)+" Cent zu tief ▲ höher drehen";cls="flat";}
+    else{txt=cents.toFixed(0)+" Cent zu hoch ▼ tiefer drehen";cls="sharp";}
+    centsLabel.textContent=txt;
+    centsLabel.className="cents-label "+cls;
 
     updateTargetButtons(nearIdx,lock);
   }
